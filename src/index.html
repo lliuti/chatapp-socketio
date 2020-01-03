@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.0/socket.io.js"></script>
+  <title>Chat</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      padding: 0;
+      margin: 0;
+      outline: 0;
+    }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background-color: #f3f3f3;
+    }
+
+    .container {
+      height: 100vh;
+      max-height: 100vh;
+      width: 100%;
+      padding: 15px 50px;
+      display: grid;
+      grid-template-columns: 1fr 270px;
+      grid-gap: 15px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    input.username {
+      width: 100%;
+      padding: 10px 20px;
+      border: 1px solid #ccc;
+    }
+
+    input.username.disabled {
+      background-color: #f1f1f1;
+      border: 1px solid #E7E7E7;
+      color: #777777;
+    }
+
+    button#join-chat {
+      padding: 10px 10px;
+      border: 1px solid #ccc;
+    }
+
+    button#join-chat:hover {
+      background-color: #ddd;
+      cursor: pointer;
+    }
+
+    .message-box {
+      width: 100%;
+      height: 90%;
+      max-height: 90%;
+      padding: 5px 0;
+      overflow-y: auto;
+    }
+
+    .message {
+      width: fit-content;
+      min-width: 200px;
+      padding: 15px 20px;
+      margin: 0 0 20px 0;
+      background-color: #686868;
+      color: #fff;
+      border-radius: 20px 25px 0px 20px;
+      margin-left: auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .message-received {
+      margin-left: 0;
+      margin-right: auto;
+      background-color: #ccc;
+      color: #000;
+      border-radius: 25px 25px 25px 0;
+    }
+
+    .message-author {
+      font-weight: 600;
+    }
+
+    .input-message-box {
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }
+
+    textarea#message {
+      width: 100%;
+      min-height: 40px;
+      resize: vertical;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 0 15px;
+      border: 1px solid #ccc;
+      resize: none;
+    }
+
+    button#send-message {
+      height: 40px;
+      padding: 00px 10px;
+      border: 1px solid #ccc;
+    }
+
+    button#send-message:hover {
+      background-color: #ddd;
+      cursor: pointer;
+    }
+
+    .user-list {
+      padding: 0 10px;
+      background-color: #f0efef;
+    }
+
+    .user-item {
+      margin-bottom: 15px;
+      border-bottom: 1px solid #ccc;
+      padding-bottom: 10px;
+    }
+
+    .user-id {
+      color: #afafaf;
+      font-size: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="chat">
+      <div class="header">
+        <input name="username" id="username" type="text" class="username" placeholder="Type your username">
+        <button id="join-chat">Join</button>
+      </div>
+      <div class="message-box"></div>
+      <div class="input-message-box">
+        <textarea name="message" id="message"></textarea>
+        <button name="send-message" id="send-message">Send</button>
+      </div>
+    </div>
+    <div class="user-list">
+      <h4>Online users</h4>
+    </div>
+  </div>
+
+
+  <script type="text/javascript">
+    $(document).ready(function () {
+      const socket = io();
+      var message;
+      var username;
+      let messageData;
+
+      socket.on('render-message', (data) => {
+        renderMessage(data);
+      });
+
+      socket.on('connected-users', (data) => {
+        console.log(data);
+        data.map(user => listUser(user));
+      });
+
+      socket.on('nickname-in-use', () => {
+        $('.message-box').css('display', 'none');
+        $('.input-message-box').css('display', 'none');
+        $('#join-chat').css('display', 'block');
+        $('#username').attr('disabled', false);
+        $('#username').removeClass('disabled');
+        $('#username').val('');
+        $('#username').attr('placeholder', 'There is already someone online with that username')
+      });
+
+      $('#send-message').click(function () {
+        message = $('#message').val();
+        username = $('#username').val();
+        messageData = {
+          message,
+          username
+        }
+        if (!(username.trim().length > 0 && message.trim().length > 0)) {
+          return false
+        }
+        socket.emit('send-message', messageData);
+        let msg = '';
+        msg += `<div class="message">`;
+        msg += `<span class="message-author">${messageData.username}</span>: ${messageData.message}`;
+        msg += `</div>`;
+        $('.message-box').append(msg);
+      });
+
+      $('#join-chat').click(function () {
+        message = $('#message').val();
+        username = $('#username').val();
+        if (!(username.trim().length > 0)) {
+          return false
+        }
+        socket.emit('user-joined', username);
+        disableUsernameInput();
+      });
+
+      function renderMessage(data) {
+        let msg = '';
+        msg += `<div class="message message-received">`;
+        msg += `<span class="message-author">${data.username}</span>: ${data.message}`;
+        msg += `</div>`;
+        $('.message-box').append(msg);
+      };
+      function listUser(user) {
+        console.log(user);
+        let listedUser = '';
+        listedUser += `<div class="user-item">`;
+        listedUser += `<div class="user-list-header">`;
+        listedUser += `<span class="user-id">${user.id}<span>`;
+        listedUser += `</div>`;
+        listedUser += `<div>`;
+        listedUser += `<span>${user.username}</span>`;
+        listedUser += `</div>`;
+        listedUser += `</div>`;
+        $('.user-list').append(listedUser);
+      };
+      function disableUsernameInput() {
+        $('.message-box').css('display', 'block');
+        $('.input-message-box').css('display', 'flex');
+        $('#join-chat').css('display', 'none');
+        $('#username').attr('disabled', true);
+        $('#username').addClass('disabled');
+      }
+    });
+  </script>
+</body>
+
+</html>
